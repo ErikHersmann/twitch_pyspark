@@ -2,33 +2,41 @@ import pyspark, glob, random
 
 from pyspark import SparkConf , SparkContext
 from pyspark.sql import SQLContext
-from pyspark.sql.functions import substring, col, sha2
+from pyspark.sql.functions import substring, col, sha2, split, regexp_replace
+from pyspark.sql.types import IntegerType, StringType, StructField, StructType
 
 
 confCluster = SparkConf().setAppName("twitch_freq")
 sc = SparkContext(conf=confCluster)
 sqlContext=SQLContext(sc)
-logfiles = glob.glob("./dataset1/*.txt") # get all logs
+logfiles = glob.glob("./dataset1/*.txt") # get all logs (populate this maybe)
+print(logfiles)
+
+# df1 = sqlContext.createDataFrame(sc.emptyRDD(), schema=["date","time","channel","user", "message"])
+df1 = sqlContext.read.text(logfiles)
+df1 = df1.filter(df1.value != "")
+
+df1 = df1.withColumn('value', split(df1.value, ' ', limit=5).cast('array<string>'))
+df1 = df1.withColumn('date', df1.value.getItem(0))
+df1 = df1.withColumn('time', df1.value.getItem(1))
+df1 = df1.withColumn('channel', df1.value.getItem(2))
+df1 = df1.withColumn('user', df1.value.getItem(3))
+df1 = df1.withColumn('message', df1.value.getItem(4))
 
 
-less_logfiles = []
-for _ in range(30): # for testing
-    less_logfiles.append(random.choice(logfiles))
-
-df1 = sqlContext.createDataFrame(sc.emptyRDD(), schema=["date","time","channel","user", "message"])
-for filename in less_logfiles:
-    textlogs = sc.textFile(filename)
-    textlogs = textlogs.map(lambda x: [element[1:] if idx in [0,2] else element[:-1] if idx in [1,3] else element 
-                                       for idx,element in enumerate(x.split(" ", 4))
-                                       ])
-    df1 = df1.union(sqlContext.createDataFrame(textlogs, schema=["date","time","channel","user", "message"]))
-
-# clean up df1 afterwards if the map is not efficient
-
-# hash users
+df1 = df1.withColumn('date', regexp_replace(df1.date, r'\[', ''))
+df1 = df1.withColumn('time', regexp_replace(df1.time, r'\]', ''))
+df1 = df1.withColumn('channel', regexp_replace(df1.channel, r'\#', ''))
+df1 = df1.withColumn('user', regexp_replace(df1.user, r'\:', ''))
+df1 = df1.drop('value')
 df1 = df1.withColumn('user', sha2(col('user'), 256))
 
+print(df1.columns)
+df1.show(5)
+# hash users
 
+
+"""
 
 metadata = sc.textFile("./dataset3/emotelist_per_channel.csv")
 metadata = metadata.map(lambda x: x.split(","))
@@ -65,3 +73,4 @@ messages = df1['message'].tolist()
 results = nlp(messages)
 df1['sentiment'] = [result['label'] for result in results]
 
+"""
