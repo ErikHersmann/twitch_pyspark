@@ -1,0 +1,12 @@
+for channel in $(ls | cut -d'-' -f1 | uniq); do
+   awk '{ if (FILENAME != file){ if (file) printf ""; file = FILENAME } } {print $0}' "${channel}"* > merged_2023/"${channel}-2023.txt"
+done
+
+ls | wc -l && ls -s -h
+
+
+for file in *; do
+ truncate -s -1 "$file"
+done
+
+tail -n 10 file.txt
