@@ -2,7 +2,7 @@ import pyspark, glob, random
 
 from pyspark import SparkConf , SparkContext
 from pyspark.sql import SQLContext
-from pyspark.sql.functions import substring, col, sha2, split, regexp_replace, count_distinct, udf
+from pyspark.sql.functions import substring, col, sha2, split, regexp_replace, count_distinct, udf, sum,avg,max,min,mean,count
 from pyspark.sql.types import IntegerType, StringType, StructField, StructType, FloatType
 
 from transformers import AutoModelForSequenceClassification, AutoTokenizer, pipeline
@@ -48,7 +48,8 @@ df1 = df1.withColumn('sentiment', sentiment_message_udf(df1.message))
 # create new dataframe of users that has the count of users messages 
 # or directly append to df1 ?
 # df1_users = df1.groupBy("user").count()
-df1_users = df1.groupBy("user").agg({'sentiment': 'avg', 'user': 'count'}) # is this wrong ?????????
+# df1_users = df1.groupBy("user").agg({'user': 'count'}) # {'sentiment': 'avg', 'user': 'count'}
+df1_users = df1.groupBy("user").agg(avg('sentiment').alias("user_sentiment"), count('user').alias('count'))
 #df1_user_frequency = df1_user_frequency.select(col("").alias("avg_sentiment"))
 # df1_user_frequency.show(8)
 
@@ -68,4 +69,4 @@ df3 = df3.withColumn('emotelist', regexp_replace(regexp_replace(regexp_replace(d
 df1.show(10, truncate=150)
 df2.show(10, truncate=150)
 df3.show(10, truncate=150)
-#df1_users.show(10, truncate=150)
+df1_users.show(10, truncate=150)
