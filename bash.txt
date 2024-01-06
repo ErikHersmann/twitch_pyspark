@@ -7,5 +7,9 @@ printf "% (%H:%M:%S)T\n" && ls | wc -l && ls -s -h
 truncate -s -1 "$file"
 
 for file in *; do echo $string | sed -i $'s/\r//' "$file"; done
-
+for file in *; do truncate -s -1 "$file"; done
 tail -n 10 file.txt
+find . -type f -name "*.txt" -size -1000k -delete
+
+85.4gb
+74.4gb
