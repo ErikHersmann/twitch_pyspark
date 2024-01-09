@@ -31,12 +31,16 @@ find_words_udf = udf(find_words_in_list, StringType())
 
 
 # Initialize SparkSession
-spark = SparkSession.Builder().appName(name="irc").getOrCreate()
-#     .config("spark.executor.memory", "8g")\
+spark = SparkSession.Builder().config("spark.executor.memory", "12g").appName(name="irc").getOrCreate()
 
 
-logfiles = glob.glob("./dataset1/*.txt")[2]  # get all logs (populate this with files)
+logfiles = glob.glob("./dataset1/*.txt")  # get all logs (populate this with files)
 print(logfiles)
+
+##################################################################################################
+##################################################################################################
+##################################################################################################
+
 # Read text files into DataFrame
 df1 = spark.read.text(logfiles)
 df1 = df1.filter(df1.value != "")
@@ -59,45 +63,63 @@ df1 = df1.withColumn('sentiment', sentiment_message_udf(df1.message))#.persist()
 df1_channels = df1.groupBy('channel').agg(avg('sentiment').alias("avg_sentiment"), count('user').alias('total_chatters'))
 
 
-#df1_duplicates = df1.groupBy(df1.columns).count().filter("count > 1")
-#df1_duplicates.show(5)
-
 df1_users = df1.groupBy("user").agg(avg('sentiment').alias("avg_sentiment"), count('user').alias('total_messages'), count_distinct('message').alias('uniq_messages'))
 df1_users = df1_users.withColumn('uniqueness', df1_users.uniq_messages / df1_users.total_messages)
 
-
-
+##################################################################################################
+##################################################################################################
+##################################################################################################
 
 df2 = spark.read.csv("./dataset2/metadata.csv", sep=',', header=True)
 
+
+##################################################################################################
+##################################################################################################
+##################################################################################################
 
 
 df3 = spark.read.csv("./dataset3/emotelist_per_channel.csv", sep=';')
 df3 = df3.select(col("_c0").alias("channel"), col("_c1").alias("emotelist"))
 df3 = df3.filter(df3.emotelist != '[]')
 df3 = df3.withColumn('emotelist', regexp_replace(regexp_replace(regexp_replace(df3.emotelist, r"', '", ','), r"\['", ""), r"'\]", ""))
-df3 = df3.withColumn('length', length_udf(df3.emotelist))
+df3 = df3.withColumn('length', length_udf(df3.emotelist)).persist()
+
+
+##################################################################################################
+##################################################################################################
+##################################################################################################
+
+# drop columns from df1 here
 
 joined_df = df1.join(df3, on="channel")
 # udf: if emotes from list in message return emotes
 # new df4 with sentiment and emotes(basically message reduced to emotes)
-joined_df = joined_df.withColumn('emotes_in_msg', find_words_udf(joined_df.message, joined_df.emotelist))
+joined_df = joined_df.withColumn('emotes_in_msg', find_words_udf(joined_df.message, joined_df.emotelist)).persist()
 
 
 # explode df4 to have emote,sent pairs then groupby emote and avg sent
 emote_sents = joined_df.withColumn("emote", explode(F.split(joined_df["emotes_in_msg"], ","))).drop('emotelist').drop('length').drop('message').drop('user').drop('date').drop('time').drop('channel').drop('emotes_in_msg')
 emote_sents = emote_sents.filter(emote_sents.emote != '')
 emote_sents = emote_sents.groupBy('emote').avg('sentiment').select('emote', 'avg(sentiment)')
-
+# add col 3 with model generated sents for 1 emote 
 
 
 df1.show(10)
-joined_df.show(10)
+#joined_df.show(10)
 emote_sents.show(10)
-#result_df.show(10)
-#channel_emote_pairs.show(10)
-#df2.show(10, truncate=100)
-#df3.show(10, truncate=100)
-#df1_users.show(10, truncate=100)
-#df1_channels.show(10, truncate=100)
-#print(df1_users.agg(corr("uniqueness", "avg_sentiment").alias('corr_1')).collect())
+df2.show(10, truncate=100)
+df3.show(10, truncate=100)
+df1_users.show(10, truncate=100)
+df1_channels.show(10, truncate=100)
+# correlations
+print(df1_users.agg(corr("uniqueness", "avg_sentiment").alias('corr')).collect())
+print(df1_users.agg(corr("total_messages", "avg_sentiment").alias('corr')).collect())
+# join df2 on channel, drop non matched
+print(df1_channels.agg(corr("watchtime", "avg_sentiment").alias('corr')).collect())
+
+# join df3 on channel, drop non matched
+print(df1_channels.agg(corr("length", "avg_sentiment").alias('corr')).collect())
+
+
+
+
